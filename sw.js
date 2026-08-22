@@ -10,7 +10,7 @@
       همین‌ها بودند که آفلاین‌نبودنشان متن عربی را خراب می‌کرد.
    ۳. بقیهٔ فایل‌های خودمان (آیکن‌ها، منیفست) → اول کش.
    ══════════════════════════════════════════════════════════════════ */
-const CACHE = 'qurb-v1';
+const CACHE = 'qurb-v2';
 const PRECACHE = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
