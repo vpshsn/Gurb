@@ -11,7 +11,7 @@
    ۳. بقیهٔ فایل‌های خودمان (آیکن‌ها، منیفست) → اول کش.
    ══════════════════════════════════════════════════════════════════ */
 const CACHE = 'qurb-v3';
-const PRECACHE = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
+const PRECACHE = ['./', './manifest.webmanifest?v=3', './icon-192.png?v=3', './icon-512.png?v=3', './icon-maskable-512.png?v=3'];
 
 self.addEventListener('install', e => {
   // allSettled نه addAll: اگر یکی از فایل‌ها ۴۰۴ بدهد، addAll کل نصب را

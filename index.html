@@ -6,7 +6,11 @@
 <title>Gurb</title>
 <!-- PWA: فقط وقتی فایل از یک آدرس https سرو شود فعال می‌شود؛ روی file:// کروم
      نه Service Worker را ثبت می‌کند نه پیشنهاد نصب می‌دهد (محدودیت خود مرورگر) -->
-<link rel="manifest" href="manifest.webmanifest">
+<!-- ?v= روی منیفست و آیکن‌ها لازم است: سرویس‌ورکر این فایل‌ها را cache-first
+     می‌دهد و کروم هم خودش کششان می‌کند، پس بدون تغییر آدرس، نصب بعدی همان
+     منیفست قدیمی (و اسم قدیمی) را می‌خواند. هر بار که اسم یا آیکن عوض شد،
+     این عدد را در index.html، manifest.webmanifest و sw.js با هم جلو ببرید. -->
+<link rel="manifest" href="manifest.webmanifest?v=3">
 <meta name="theme-color" content="#0f0e0b" id="meta-theme-color">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
