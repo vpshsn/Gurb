@@ -181,7 +181,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .node-item,.fav-item,.search-result-item{user-select:none;-webkit-user-select:none;}
 
 /* LONG-PRESS CONTEXT MENU */
-.lp-menu{position:fixed;z-index:400;background:var(--bg2);border:1px solid rgba(201,168,76,.3);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.5);padding:6px;min-width:160px;transform:scale(.92);opacity:0;transition:opacity .15s,transform .15s;pointer-events:none;}
+.lp-menu{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;position:fixed;z-index:400;background:var(--bg2);border:1px solid rgba(201,168,76,.3);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.5);padding:6px;min-width:160px;transform:scale(.92);opacity:0;transition:opacity .15s,transform .15s;pointer-events:none;}
 .lp-menu.open{opacity:1;transform:scale(1);pointer-events:all;}
 .lp-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:.88rem;color:var(--text);font-family:'Vazirmatn',sans-serif;transition:background .15s;}
 .lp-item:active,.lp-item:hover{background:rgba(201,168,76,.12);}
@@ -1303,6 +1303,14 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <span class="lp-item-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span>
     <span id="lp-bookmark-label" data-i18n="bookmarkLabel">نشانه‌گذاری</span>
   </div>
+  <div class="lp-item" id="lp-translit-item" onclick="lpTranslitAction()">
+    <span class="lp-item-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></span>
+    <span data-i18n="lpTranslitLabel">تلفظ ترکی این بند</span>
+  </div>
+  <div class="lp-item" id="lp-translit-all-item" onclick="lpTranslitAllAction()">
+    <span class="lp-item-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/><path d="M12 8v8M8 12h8" opacity=".55"/></svg></span>
+    <span data-i18n="lpTranslitAllLabel">تلفظ خودکار همهٔ بندها</span>
+  </div>
   <div class="lp-item" onclick="lpCopyAction()">
     <span class="lp-item-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
     <span data-i18n="copyTextLabel">کپی متن</span>
@@ -1508,6 +1516,96 @@ function restoreHomeScroll(){
   // اگر زودتر تنظیم شود دوباره قیچی می‌شود
   requestAnimationFrame(()=>{ w.scrollTop=v; });
 }
+// == ناوبریِ برگشت — بازنویسی‌شده ==
+// مدل قبلی یک «نگهبان» در تاریخچه نگه می‌داشت و پشتهٔ واقعی را در حافظهٔ جاوااسکریپت
+// می‌ساخت. آن مدل به یک فرض شکننده وابسته بود: هر بار پس از مصرفِ نگهبان باید بلافاصله
+// نگهبانِ تازه push شود. اگر آن push یک بار نمی‌گرفت (WebView، محدودیتِ pushState،
+// بازیابیِ صفحه) اپ در همان فشردنِ بعدی بسته می‌شد.
+//
+// مدل تازه: هیچ نگهبانی وجود ندارد. هر مقصدِ ناوبری یک ورودیِ واقعیِ history است و
+// خودِ مرورگر پشتهٔ ماست. برگشت = history.back() و بس. popstate فقط توصیفگرِ صفحه را
+// از e.state می‌گیرد و نقاشی می‌کند. هیچ pushState ای داخل popstate نیست، پس چیزی
+// نمی‌تواند «از دست برود».
+//
+// ورودیِ پایه (state تهی) = ریشهٔ خانه. برگشت روی آن یعنی خروج از اپ — همان رفتار
+// استاندارد اندروید.
+let navSection='home';
+let navCur={page:'home',folderId:null};
+// سایهٔ ورودی‌های زیرِ صفحهٔ جاری. فقط برای یک کار لازم است: تشخیص اینکه ورودیِ
+// بلافاصله زیرِ ما همان مقصدی است که می‌خواهیم برویم — در آن صورت به‌جای بازنویسیِ
+// ورودیِ جاری (که ورودیِ تکراری و یک فشردنِ بی‌اثرِ برگشت می‌سازد) یک قدم عقب می‌رویم.
+const navPrev=[];
+
+function navSame(a,b){
+  return !!a&&!!b&&a.page===b.page&&a.folderId===b.folderId&&a.clFolderId===b.clFolderId
+    &&a.prayerId===b.prayerId&&a.bookId===b.bookId&&a.p===b.p;
+}
+// رفتن به مقصدِ تازه: یک ورودیِ واقعی به تاریخچه اضافه می‌شود
+function navTo(st,section){
+  if(section) navSection=section;
+  if(navSame(navCur,st)) return;      // همان صفحه: ورودیِ تکراری نساز
+  navPrev.push(navCur);
+  navCur=st;
+  try{ history.pushState({nav:st,section:navSection},''); }catch(e){}
+}
+// جایگزینیِ صفحهٔ جاری، بدون ساختن قدمِ برگشت
+function navReplace(st,section){
+  if(section) navSection=section;
+  navCur=st;
+  try{ history.replaceState({nav:st,section:navSection},''); }catch(e){}
+}
+// نقاشیِ یک توصیفگرِ صفحه — تنها مسیرِ برگشت (تاریخچه را دست نمی‌زند)
+function navRender(st){
+  navCur=st;
+  const page=st.page||'home';
+  // == BOOK MODULE: صفحات کتاب == (bkShowScreen خودش بقیهٔ صفحه‌ها را پنهان می‌کند)
+  if(page==='book'||page==='bookread'){ bookHandlePopState(st); return; }
+  if(page==='prayer'){
+    currentPrayerId=st.prayerId;
+    currentFolderId=st.folderId||null;
+    _showScreenInstant('prayer');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    if(!editMode) document.getElementById('nav-current').classList.add('active');
+    currentTab='prayer';
+    updateInlineAddButtons();
+    setTimeout(()=>showReadingProgress(),80);
+  } else if(page==='classified'){
+    classifiedCurrentFolder=st.clFolderId||null;
+    _showScreenInstant('classified');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.getElementById('nav-classified')?.classList.add('active');
+    currentTab='classified';
+    renderClassifiedTree();
+    updateInlineAddButtons();
+    hideReadingProgress();
+    _exitFullscreenIfActive();
+  } else if(page==='favorites'||page==='settings'){
+    _showScreenInstant(page);
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.getElementById('nav-'+page)?.classList.add('active');
+    currentTab=page;
+    if(page==='favorites'){renderFavorites();if(currentFavTab==='bookmarks')renderBookmarks();}
+    updateInlineAddButtons();
+    hideReadingProgress();
+    _exitFullscreenIfActive();
+  } else if(page==='search'){
+    _showScreenInstant('search');
+    currentTab='search';
+    hideReadingProgress();
+  } else {
+    currentFolderId=st.folderId!==undefined?st.folderId:null;
+    _showScreenInstant('home');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.getElementById('nav-home').classList.add('active');
+    currentTab='home';
+    renderHomeList();
+    restoreHomeScroll();
+    updateInlineAddButtons();
+    hideReadingProgress();
+    _exitFullscreenIfActive();
+  }
+}
+
 function switchTab(tab){
   saveHomeScroll();
   ['home','favorites','settings','classified'].forEach(t=>{
@@ -1519,25 +1617,23 @@ function switchTab(tab){
   currentTab=tab;
   updateInlineAddButtons();
   hideReadingProgress();
-  // اگر مقصد یکی از تب‌های تنظیمات/علاقه‌مندی/طبقه‌بندی است: ابتدا وضعیت فعلی تاریخچه با
-  // «خانه» جایگزین می‌شود (نه push) تا با زدن دکمهٔ برگشت، این تب‌ها در تاریخچه باقی نمانند
-  // و برگشت همیشه یک‌مرحله‌ای به خانه برسد.
-  // اگر مقصد خودِ «خانه» است و از یکی از همین تب‌ها می‌آییم، زیرِ آن تب از قبل دقیقاً همین
-  // ورودیِ «خانه/همین پوشه» push شده — پس باید با back() یک قدم به آن رسید، نه با replaceState
-  // که یک ورودیِ تکراریِ خالی می‌ساخت و باعث می‌شد یک بار فشردن دکمهٔ برگشت هیچ اثری نداشته باشد
-  const _curPage=(history.state&&history.state.page)||null;
-  const _fromCollapsibleTab=(_curPage==='favorites'||_curPage==='settings'||_curPage==='classified');
+  // تب‌های پایین «مقصدِ تازه» نیستند، جای‌گزینِ صفحهٔ جاری‌اند — پس هیچ‌کدام نباید
+  // دنبالهٔ پوشه‌ها را به‌هم بزند.
   if(tab==='home'){
-    if(_fromCollapsibleTab){
-      history.back();
-    } else if(_curPage!=='home'){
-      history.replaceState({page:'home',folderId:currentFolderId},'');
+    if(navSection!=='home'||navCur.page!=='home'){
+      // از تنظیمات/علاقه‌مندی/دعا/طبقه‌بندی برمی‌گردیم: همان پوشه‌ای که رهایش کردیم.
+      // اگر ورودیِ زیرِ ما دقیقاً همین خانه است، بازنویسی نکن — یک قدم عقب برو،
+      // وگرنه دو ورودیِ یکسان پشتِ سرِ هم می‌ماند و یک فشردنِ برگشت بی‌اثر می‌شود.
+      const _tgt={page:'home',folderId:currentFolderId};
+      if(navSame(navPrev[navPrev.length-1],_tgt)){ history.back(); return; }
+      navSection='home';
+      navReplace(_tgt);
+      renderHomeList();
       restoreHomeScroll();
     } else if(currentFolderId){
-      // از قبل روی خانه‌ایم و داخل پوشه: «خانه» یعنی برگشت به ریشه.
-      // replaceState نه push، چون این یک قدمِ رو‌به‌عقب است نه یک مقصد تازه
+      // از قبل روی خانه‌ایم و داخل پوشه: «خانه» یعنی پرش به ریشه
       currentFolderId=null;
-      history.replaceState({page:'home',folderId:null},'');
+      navReplace({page:'home',folderId:null});
       renderHomeList();
       restoreHomeScroll();
     } else {
@@ -1545,9 +1641,17 @@ function switchTab(tab){
       const w=document.getElementById('home-list-wrap');
       if(w) smoothScrollTo(w,0);
     }
+  } else if(tab==='classified'){
+    // بخشِ مستقل: برگشت داخلش پوشه‌به‌پوشه است و از ریشه‌اش به خانه می‌رسد.
+    // اگر ورودیِ زیرِ ما همین صفحهٔ طبقه‌بندی است یک قدم عقب برو، ورودیِ تکراری نساز.
+    const _tgtCl={page:'classified',clFolderId:classifiedCurrentFolder};
+    if(navSame(navPrev[navPrev.length-1],_tgtCl)){ history.back(); return; }
+    navTo(_tgtCl,'classified');
   } else {
-    history.replaceState({page:'home',folderId:currentFolderId},'');
-    history.pushState({page:tab,folderId:currentFolderId},'');
+    // تنظیمات/علاقه‌مندی‌ها یک «سرزدن» است: ورودیِ جاری دست‌نخورده می‌ماند و ورودیِ تب
+    // روی آن گذاشته می‌شود، پس برگشت دقیقاً به همان‌جایی می‌رسد که از آن آمده‌ایم و این
+    // سرزدن هیچ ردی در دنبالهٔ پوشه‌ها نمی‌گذارد.
+    navTo({page:tab,folderId:currentFolderId});
   }
   if(tab==='favorites'){renderFavorites();if(currentFavTab==='bookmarks')renderBookmarks();}
   if(tab==='classified'){renderClassifiedTree();}
@@ -1562,7 +1666,7 @@ function openFolder(folderId){
   renderHomeList();
   switchTabRaw('home');
   restoreHomeScroll();         // پوشهٔ تازه از بالا، پوشهٔ دیده‌شده از همان‌جا
-  history.pushState({page:'home',folderId},'');
+  navTo({page:'home',folderId},'home');   // دنبالهٔ پوشه‌به‌پوشه برای دکمهٔ برگشت
 }
 
 function switchTabRaw(tab){
@@ -1676,8 +1780,8 @@ function openPrayer(nodeId){
   // دعا→دعا (دکمه‌های بعدی/قبلی) نباید ورودی تازه بسازد، وگرنه برگشت به فهرست
   // به تعداد دعاهای دیده‌شده فشردن لازم دارد
   const _hs={page:'prayer',prayerId:nodeId,folderId:currentFolderId};
-  if(history.state&&history.state.page==='prayer') history.replaceState(_hs,'');
-  else history.pushState(_hs,'');
+  if(navCur.page==='prayer') navReplace(_hs);
+  else navTo(_hs);
   // نوار پیمایش را بعد از render نشان بده
   setTimeout(()=>showReadingProgress(),80);
 }
@@ -1695,12 +1799,13 @@ function getBreadcrumbText(folderId){
   return getFolderPath(folderId).map(n=>nodeName(n)).join(' › ');
 }
 
-function goBack(){
-  history.back();
-}
+function goBack(){ navBack(); }
 
 function goToCurrentPrayer(){
   if(!currentPrayerId){showToast(tr18n('noPrayerOpenYet'));return;}
+  // «دعای جاری» یک تبِ پایین است: برگشت از آن باید به منوی خانه برسد، نه به
+  // تنظیمات/طبقه‌بندی‌ای که شاید از آن آمده‌ایم
+  if(navCur.page!=='prayer') navReplace({page:'home',folderId:currentFolderId},'home');
   const container=document.getElementById('prayer-verses-container');
   const notYetRendered=!container||container.children.length===0;
   if(notYetRendered){
@@ -1724,12 +1829,8 @@ function goToCurrentPrayer(){
   document.getElementById('screen-prayer').classList.remove('hidden');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('nav-current').classList.add('active');
-  // home را ذخیره کن تا back به درخت برگردد — ولی اگر از قبل روی همین دعا هستیم
-  // (مثلاً «دعای جاری» دوباره زده شد) ورودی تکراری ساخته نشود
-  if(!(history.state&&history.state.page==='prayer')){
-    history.replaceState({page:'home',folderId:currentFolderId},'');
-    history.pushState({page:'prayer',prayerId:currentPrayerId,folderId:currentFolderId},'');
-  }
+  // اگر از قبل روی همین دعا هستیم («دعای جاری» دوباره زده شد) قدمِ تکراری ساخته نشود
+  if(navCur.page!=='prayer') navTo({page:'prayer',prayerId:currentPrayerId,folderId:currentFolderId});
   setTimeout(()=>showReadingProgress(),80);
   // حالت ویرایش از صفحه‌ی تنظیمات روشن می‌شود و آن موقع صفحه‌ی دعا پنهان است،
   // پس دکمه‌ی افزودن بند باید هنگام بازگشت به دعای جاری دوباره ارزیابی شود
@@ -1745,7 +1846,6 @@ function updateNavCurrentState(){
 }
 
 // BACK BUTTON
-let lastBackTime=0;
 function _showScreenInstant(show, hideList){
   const allScreens=['home','prayer','search','favorites','settings','classified'];
   allScreens.forEach(s=>{
@@ -1770,71 +1870,38 @@ function _showScreenInstant(show, hideList){
   });
 }
 
+// لایه‌های روییِ باز (مودال، تمام‌صفحه) باید قبل از هر ناوبری بسته شوند.
+// اگر چیزی بسته شد true برمی‌گرداند.
+function navCloseTopLayer(){
+  const modals=document.querySelectorAll('.modal-overlay.open');
+  if(modals.length){ modals[modals.length-1].classList.remove('open'); return true; }
+  if(typeof _isFullscreen!=='undefined' && _isFullscreen){ _exitFullscreenIfActive(); return true; }
+  return false;
+}
+// دکمه‌های برگشتِ داخلِ اپ همگی از همین‌جا رد می‌شوند
+function navBack(){
+  if(navCloseTopLayer()) return;
+  history.back();
+}
+// تنها گیرندهٔ دکمهٔ برگشت گوشی / کشیدن از لبه.
 window.addEventListener('popstate',function(e){
-  const st=e.state||{};
-  const page=st.page||'home';
-
-  // ══ BOOK MODULE: صفحات کتاب ══
-  if(page==='book'||page==='bookread'){ bookHandlePopState(st); return; }
-
-  if(page==='prayer'){
-    currentPrayerId=st.prayerId;
-    currentFolderId=st.folderId||null;
-    _showScreenInstant('prayer',['home','favorites','settings','search']);
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    if(!editMode) document.getElementById('nav-current').classList.add('active');
-    currentTab='prayer';
-    updateInlineAddButtons();
-    setTimeout(()=>showReadingProgress(),80);
-
-  } else if(page==='home'){
-    // folderId دقیقاً از state خوانده می‌شود — ترتیب درخت درست می‌ماند
-    currentFolderId=st.folderId!==undefined?st.folderId:null;
-    _showScreenInstant('home',['prayer','search','favorites','settings']);
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    document.getElementById('nav-home').classList.add('active');
-    currentTab='home';
-    renderHomeList();
-    restoreHomeScroll();
-    updateInlineAddButtons();
-    hideReadingProgress();
-    _exitFullscreenIfActive();
-
-  } else if(page==='favorites'||page==='settings'||page==='classified'){
-    _showScreenInstant(page,['prayer','search','home'].concat(
-      page==='favorites'?['settings','classified']:
-      page==='settings'?['favorites','classified']:
-      ['favorites','settings']
-    ));
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    document.getElementById('nav-'+page)?.classList.add('active');
-    currentTab=page;
-    updateInlineAddButtons();
-    hideReadingProgress();
-    if(page==='classified') renderClassifiedTree();
-
-  } else if(page==='search'){
-    // back به این state یعنی جستجو دوباره باز شده — کاری نکن (state معتبر است)
-    // (جستجو از طریق openSearch مدیریت می‌شود)
-
-  } else {
-    // اول stack — جلوگیری از خروج
-    const now=Date.now();
-    if(now-lastBackTime<2200){
-      showToast(tr18n('exitAppHint'));
-    } else {
-      lastBackTime=now;
-      showToast(tr18n('pressBackAgainToExit'));
-    }
-    history.pushState({page:'home',folderId:null},'');
-    currentFolderId=null;
-    _showScreenInstant('home',['prayer','search','favorites','settings']);
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    document.getElementById('nav-home').classList.add('active');
-    currentTab='home';
-    renderHomeList();
-    hideReadingProgress();
+  // مودال/تمام‌صفحه باز بود: آن را ببند و ورودیِ مصرف‌شده را برگردان
+  if(navCloseTopLayer()){
+    try{ history.pushState({nav:navCur,section:navSection},''); }catch(err){}
+    return;
   }
+  const st=e.state&&e.state.nav;
+  if(!st){
+    // ورودیِ پایه = ریشهٔ خانه. فشردنِ بعدیِ برگشت اپ را می‌بندد (رفتار استاندارد).
+    navSection='home';
+    navPrev.length=0;
+    try{ navRender({page:'home',folderId:null}); }catch(err){ console.warn('navRender:',err); }
+    return;
+  }
+  const sec=e.state.section||'home';
+  navSection=sec;
+  navPrev.pop();
+  try{ navRender(st); }catch(err){ console.warn('navRender:',err); }
 });
 
 // ── RENDER HOME (tree browser) ──
@@ -1952,7 +2019,7 @@ function renderPrayer(){
           <button class="reorder-btn" style="border-bottom:none;border-radius:0 8px 8px 0;width:28px;height:28px" onclick="moveVerse('${v.id}',1)">▼</button>
         </div>
       </div>
-      <button class="verse-action-btn" onclick="translitVerse(event,'${v.id}')" title="${esc(tr18n('translitGenBtn'))}" aria-label="${esc(tr18n('translitGenBtn'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+      ${v.noteMode?'':`<button class="verse-action-btn" onclick="translitVerse(event,'${v.id}')" title="${esc(tr18n('translitGenBtn'))}" aria-label="${esc(tr18n('translitGenBtn'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>`}
       <button class="verse-action-btn" onclick="editVerse(event,'${v.id}')" title="${esc(tr18n('editVerseLabel'))}" aria-label="${esc(tr18n('editVerseLabel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
       <button class="verse-action-btn" style="border-color:rgba(192,83,58,.3);color:var(--red)" onclick="deleteVerse(event,'${v.id}')" title="${esc(tr18n('deleteLabel'))}" aria-label="${esc(tr18n('deleteLabel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
     </div>`:'';
@@ -2107,7 +2174,20 @@ function openLpMenu(x,y){
   const currentBm=state.bookmarks&&state.bookmarks[currentPrayerId];
   label.textContent=(currentBm===_lpTargetVerseId)?tr18n('bookmarkRemoveLabel'):tr18n('bookmarkLabel');
 
-  const W=window.innerWidth,H=window.innerHeight,mW=180,mH=110;
+  // تلفظ ترکی این بند: فقط برای بندهای غیرتوضیحی که متن عربی دارند
+  // تلفظ خودکار همهٔ بندها: هر جا دستِ‌کم یک بند عربی در همین دعا هست
+  const _lpVerses=state.verses[currentPrayerId]||[];
+  const _lpV=_lpVerses.find(v=>v.id===_lpTargetVerseId);
+  const trItem=document.getElementById('lp-translit-item');
+  const trShow=!!(_lpV&&!_lpV.noteMode&&_lpV.arabic);
+  trItem.style.display=trShow?'':'none';
+  const trAllItem=document.getElementById('lp-translit-all-item');
+  const trAllShow=_lpVerses.some(v=>v.arabic);  // همان شرطِ translitAllVerses
+  trAllItem.style.display=trAllShow?'':'none';
+
+  // ارتفاع تخمینی برای جاگذاری: ۲ آیتم همیشگی + هر آیتم شرطیِ نمایان
+  const W=window.innerWidth,H=window.innerHeight,mW=180,
+        mH=12+45*(2+(trShow?1:0)+(trAllShow?1:0));
   let left=x,top=y+10;
   if(left+mW>W) left=W-mW-12;
   if(top+mH>H) top=y-mH-10;
@@ -2148,6 +2228,18 @@ function lpBookmarkAction(){
   const vid=_lpTargetVerseId; // ذخیره قبل از بستن منو
   closeLpMenu();
   if(vid) setBookmark(vid);
+}
+
+function lpTranslitAction(){
+  const vid=_lpTargetVerseId; // ذخیره قبل از بستن منو
+  closeLpMenu();
+  if(!vid) return;
+  translitVerse({stopPropagation(){}},vid);
+}
+
+function lpTranslitAllAction(){
+  closeLpMenu();
+  translitAllVerses();
 }
 
 function lpCopyAction(){
@@ -2314,23 +2406,36 @@ const _AR_CONS={'ب':'b','ت':'t','ث':'s̱','ج':'c','ح':'ḥ','خ':'ḫ','د'
   'ل':'l','م':'m','ن':'n','ه':'h','ة':'t','و':'v','ي':'y','ی':'y','ى':'','ء':'ʾ','أ':'ʾ','إ':'ʾ',
   'آ':'ʾ','ؤ':'ʾ','ئ':'ʾ','ا':''};
 // حروف تفخیمی: کنارشان مصوت پُر (a) و کنار بقیه مصوت نازک (e) نوشته می‌شود
-const _AR_EMPHATIC='خصضطظغقحعءأإآؤئار';
+// همزه و الف اینجا نیستند: حلقی‌اند ولی مفخّم نیستند — أَنْتَ یعنی ente نه ante
+const _AR_EMPHATIC='خصضطظغقحعر';
 const _AR_DIAC=/[\u064B-\u0653\u0670]/;
 const _AR_COMB=/[\u0300-\u036F]/;   // نشانه‌های ترکیبی لاتین (خط زیرِ s + U+0331)
 const _AR_SUN='تثدذرزسشصضطظلن';
 // واژه‌هایی که الف کشیدهٔ پنهان یا نگارش استثنایی دارند و الگوریتم حرف‌به‌حرف غلط می‌سازد
-const _AR_WORDS={'الله':'Allâh','اللهم':'Allâhümme','لله':'lillâh','بالله':'billâh','والله':'vallâh',
-  'تالله':'tallâh','هذا':'hâẕâ','هذه':'hâẕihi','ذلك':'ẕâlike','هؤلاء':'hâʾulâʾi','لكن':'lâkin','رحمن':'raḥmân'};
+const _AR_WORDS={'الله':'Allâh','اللهم':'Allâhummė','لله':'lillâh','بالله':'billâh','والله':'vallâh',
+  'تالله':'tallâh','هذا':'hâẕâ','هذه':'hâẕihi','ذلك':'ẕâlikė','هؤلاء':'hâʾulâʾi','لكن':'lâkin','رحمن':'raḥmân',
+  // موصول‌ها: «الـ»شان جزء خودِ واژه است نه حرف تعریف، پس مسیر _arDropArticle لامِ دوم را می‌خورد
+  // و الَّذِى را به eẕ-ẕâ تبدیل می‌کند. کلیدها با ي عربی‌اند؛ ى/ی را key در _arWord یکسان می‌کند.
+  'الذي':'ėllezî','التي':'ėlletî','الذين':'ėllezîne','اللذان':'ėllezâni',
+  'اللذين':'ėllezėyni','اللتان':'ėlletâni','اللتين':'ėlletėyni',
+  'اللاتي':'ėllâtî','اللائي':'ėllâʾî','اللواتي':'ėllevâtî',
+  // «الـ»شان حرف تعریف نیست و مدّشان هم نوشته نمی‌شود (اِلهی → El-hy)
+  'اله':'ilâh','الهي':'ilâhî','الهنا':'ilâhenâ'};
+// یاءِ پایانیِ این‌ها الف مقصوره است. ی فارسی هر دو خوانش را می‌نویسد، پس نه قاعده‌ای
+// می‌تواند تشخیصشان بدهد نه از رسم‌الخط برمی‌آید؛ فقط فهرست‌کردن جواب می‌دهد.
+// شرطِ «بی‌شدّه» در _arWord عَلِيٍّ (نام) را از عَلىٰ جدا می‌کند — کلید هر دو «علي» است.
+const _AR_MAQSURA={'علي':'ʿalâ','الي':'ilâ','حتي':'ḥattâ','موسي':'mûsâ','عيسي':'ʿîsâ',
+  'متي':'metâ','لدي':'ledâ'};
 
 function _arStripD(s){return s.replace(/[\u064B-\u065F\u0670\u0640\u06D6-\u06ED]/g,'');}
 
 // آخرین حرکتِ واژه → مصوت پایانیِ اعرابی (فقط برای مسیر واژه‌نامه)
 function _arCaseTail(w,base){
-  if(/[aeiouâîû]$/.test(base)) return '';
+  if(/[aeėiouâîû]$/.test(base)) return '';
   for(let i=w.length-1;i>=0;i--){
     const ch=w[i];
-    if(ch==='ِ')return 'i'; if(ch==='ُ')return 'u'; if(ch==='َ')return 'e';
-    if(ch==='ٍ')return 'in'; if(ch==='ٌ')return 'un'; if(ch==='ً')return 'en';
+    if(ch==='ِ')return 'i'; if(ch==='ُ')return 'u'; if(ch==='َ')return 'ė';
+    if(ch==='ٍ')return 'in'; if(ch==='ٌ')return 'un'; if(ch==='ً')return 'ėn';
     if(ch>='ء'&&ch<='ي')return '';
   }
   return '';
@@ -2341,7 +2446,14 @@ function _arTokens(w){
   const t=[];
   for(const ch of w){
     const last=t[t.length-1];
-    if(ch==='ّ'){ if(last) last.sh=true; continue; }                       // شدّه
+    // شدّه گاهی پس از الف تایپ می‌شود (إِلاّ به‌جای إِلّا). الف صامت نیست و تکرارپذیر
+    // نیست، پس شدّه آنجا خاموش می‌مانْد و هم صامت هم مدّ می‌افتاد → il. به حرفِ پیش می‌چسبد.
+    if(ch==='ّ'){
+      let k=t.length-1;
+      if(k>0&&t[k].c==='ا'&&!t[k].v&&!t[k].sh) k--;
+      if(k>=0&&t[k]) t[k].sh=true;
+      continue;
+    }
     if(ch==='َ'){ if(last) last.v='a'; continue; }                          // فتحه
     if(ch==='ِ'){ if(last) last.v='i'; continue; }                          // کسره
     if(ch==='ُ'){ if(last) last.v='u'; continue; }                          // ضمه
@@ -2357,12 +2469,33 @@ function _arTokens(w){
   // ادغام حروف مدّ (ا و ی) در مصوت کوتاهِ همجنسِ قبل → â û î
   for(let i=t.length-1;i>0;i--){
     const p=t[i-1], c=t[i];
+    // الف خنجری روی الف مقصوره (ىٰ در أَعْلَىٰ، مُوسَىٰ): خودش مدّ دارد پس از فیلترِ زیر
+    // رد نمی‌شد و یک â جدا پس از فتحه چاپ می‌کرد → eʿleâ به‌جای eʿlâ
+    if(c.c==='ى'&&c.lg==='a'&&!c.v&&!c.tn&&!c.sh&&!p.lg&&(p.v==='a'||!p.v)){
+      p.lg='a'; p.v=null; t.splice(i,1); continue;
+    }
     if(c.sh||c.v||c.tn||c.lg) continue;
     if(c.c==='ا'&&p.tn==='a'){ t.splice(i,1); }                                  // الفِ تنوین نصب
+    // الفِ فارقه: واوِ جمعِ پایانی الفِ خاموش می‌گیرد (آمَنُوا، كانُوا، قالُوا).
+    // باید پیش از قاعدهٔ پیش‌فرضِ زیر بیاید وگرنه آن الف، واو را صامت می‌کند → âmenuvâ
+    else if(c.c==='ا'&&i===t.length-1&&p.c==='و'&&!p.v&&!p.lg&&!p.tn){ t.splice(i,1); }
     else if(c.c==='ا'&&p.v==='a'&&!p.lg){ p.lg='a';p.v=null;t.splice(i,1); }
-    else if(c.c==='و'&&p.v==='u'&&!c.sk&&!p.lg){ p.lg='u';p.v=null;t.splice(i,1); }
-    else if((c.c==='ي'||c.c==='ی')&&p.v==='i'&&!c.sk&&!p.lg){ p.lg='i';p.v=null;t.splice(i,1); }
-    else if(c.c==='ى'&&!p.lg){ p.lg='a';p.v=null;t.splice(i,1); }                // الف مقصوره
+    // الفِ بی‌نشانه پس از حرفِ بی‌حرکت (بدون فتحه/ضمه/کسره/سکون/تنوین صریح): پیش‌فرض مدّ â
+    // مثال‌ها: لا، إِلّا، الْخِلافَةِ، بِاسْتِخْلافِهِمْ — رسم‌الخط این کلمات فتحه را روی حرف پیش از الف نمی‌نویسد
+    else if(c.c==='ا'&&!p.v&&!p.sk&&!p.tn&&!p.lg&&!c.sk){ p.lg='a';p.v=null;t.splice(i,1); }
+    // سکونِ صریح روی و/ی مانع مدّ نیست: پس از ضمه/کسره همیشه û/î است (الْقَيُّوْمُ، أَتُوْبُ).
+    // دوگانهٔ ev/ey از راه دیگری بیرون می‌ماند: آنجا حرکتِ پیشین فتحه است نه ضمه/کسره.
+    else if(c.c==='و'&&p.v==='u'&&!p.lg){ p.lg='u';p.v=null;t.splice(i,1); }
+    else if((c.c==='ي'||c.c==='ی')&&p.v==='i'&&!p.lg){ p.lg='i';p.v=null;t.splice(i,1); }
+    // و/ی بی‌نشانه در میانِ واژه پس از حرفِ بی‌حرکت: قرینهٔ همان قاعدهٔ الفِ بی‌نشانهٔ بالا
+    // (فیها → fîhâ، تَعْظیماً → teʿẓîmen). دوگانهٔ ev/ey بیرون می‌ماند چون آنجا حرفِ پیش
+    // فتحه دارد (يَوْم، بَيْت) و شرطِ !p.v رد می‌شود؛ أَبْواب هم با !p.sk کنار می‌رود.
+    else if((c.c==='و'||c.c==='ي'||c.c==='ی')&&i<t.length-1&&!p.v&&!p.sk&&!p.tn&&!p.lg&&!c.sk){
+      p.lg=(c.c==='و'?'u':'i');p.v=null;t.splice(i,1);
+    }
+    else if(c.c==='ى'&&p.tn==='a'){ t.splice(i,1); }                             // هُدًى — قرینهٔ الفِ تنوین نصب
+    // الف مقصوره: پس از کسره یاءِ کشیده است نه الف (إِنِّى → innî، فِى → fî، الَّتِى → elletî)
+    else if(c.c==='ى'&&!p.lg){ p.lg=(p.v==='i'?'i':'a');p.v=null;t.splice(i,1); }
   }
   return t;
 }
@@ -2371,16 +2504,19 @@ function _arRender(t){
   let out='';
   t.forEach((u,i)=>{
     let c=_AR_CONS[u.c]||'';
+    // «ى» در جدول مصوت‌ساز است (الف مقصوره)، ولی وقتی خودش حرکت یا تشدید بگیرد
+    // یاءِ صامت است و باید y بدهد وگرنه ناپدید می‌شود: الْحَىُّ → el-ḥau، عَلَىَّ → ʿalee
+    if(u.c==='ى'&&(u.sh||u.v||u.tn)) c='y';
     if(u.c==='ة') c=(i===t.length-1&&!u.v&&!u.tn)?'':'t';                        // تای گرد در وقف
     if(i===0&&'اأإءؤئ'.indexOf(u.c)>=0) c='';                                    // همزهٔ آغازین فقط مصوت می‌دهد
     if(u.sh&&c) c+=c;                                                            // تشدید = تکرار صامت
     out+=c;
     // همزهٔ وصلِ آغازین (الف بی‌حرکت + حرف ساکن): استغفر → istağfir
-    if(i===0&&!c&&!u.v&&!u.lg&&!u.tn&&t[1]&&t[1].sk){out+='i';return;}
+    if(i===0&&!c&&!u.v&&!u.lg&&!u.tn&&t[1]&&t[1].sk){out+='\u0001i';return;}
     const back=_AR_EMPHATIC.indexOf(u.c)>=0;
     if(u.lg) out+=(u.lg==='a'?'â':u.lg==='i'?'î':'û');
-    else if(u.v) out+=(u.v==='a'?(back?'a':'e'):u.v==='i'?'i':'u');
-    if(u.tn) out+=(u.tn==='a'?(back?'an':'en'):u.tn==='i'?'in':'un');
+    else if(u.v) out+=(u.v==='a'?(back?'a':'ė'):u.v==='i'?'i':'u');
+    if(u.tn) out+=(u.tn==='a'?(back?'an':'ėn'):u.tn==='i'?'in':'un');
   });
   return out;
 }
@@ -2418,11 +2554,18 @@ function _arWord(w){
   w=w.replace(/ـ/g,'');
   const bare=_arStripD(w);
   if(!bare) return '';
-  if(_AR_WORDS[bare]) return _AR_WORDS[bare]+_arCaseTail(w,_AR_WORDS[bare]);
+  // کلیدِ واژه‌نامه با املای عربی سنجیده می‌شود تا تایپِ فارسیِ ی/ک هم بگیرد (الذی، وجهک)
+  // نشیمنِ همزه هم یکسان می‌شود: إِلهَ همان «اله» واژه‌نامه است. آ عمداً بیرون می‌ماند
+  // — آلِهِ (خاندانش) وگرنه به إله گره می‌خورد و ilâhi می‌شود نه âlihi
+  const key=bare.replace(/[ىی]/g,'ي').replace(/ک/g,'ك').replace(/[أإ]/g,'ا');
+  if(_AR_WORDS[key]) return _AR_WORDS[key]+_arCaseTail(w,_AR_WORDS[key]);
+  if(_AR_MAQSURA[key]&&w.indexOf('ّ')<0) return _AR_MAQSURA[key]+_arCaseTail(w,_AR_MAQSURA[key]);
   // حرف پیوسته پیش از «الـ» (وَالْ، فَالْ، بِالْ، كَالْ): همزهٔ وصل می‌افتد → ve'l-kur'ân
-  if(bare.length>3&&'وفبكک'.indexOf(bare[0])>=0&&bare[1]==='ا'&&bare[2]==='ل'){
+  // شرطِ bare[3]!=='ا': «الـ» هیچ‌وقت پس از لامش الف ندارد. بدون این شرط وَالاكُمْ
+  // (فعلِ والى + ضمیر) به وَ + الـ تجزیه می‌شد → v'l-kum به‌جای vâlâkum
+  if(bare.length>3&&'وفبكک'.indexOf(bare[0])>=0&&bare[1]==='ا'&&bare[2]==='ل'&&bare[3]!=='ا'){
     const cut=_arCutFirst(w);
-    return _arRender(_arTokens(cut.head))+"'"+_arWord(cut.rest).replace(/^e/,'');
+    return _arRender(_arTokens(cut.head))+"'"+_arWord(cut.rest).replace(/^ė/,'');
   }
   // حرف پیوسته + همزهٔ وصل (وَاسْتَشْفَعْنَا → vesteşfa'nâ): الف کشش نمی‌دهد، می‌افتد
   if(bare.length>3&&'وفبكک'.indexOf(bare[0])>=0&&bare[1]==='ا'){
@@ -2430,13 +2573,38 @@ function _arWord(w){
     if(tk.length>1&&tk[0].c==='ا'&&!tk[0].v&&!tk[0].lg&&tk[1].sk)
       return _arRender(_arTokens(cut.head))+_arWord(cut.rest).replace(/^i/,'');
   }
-  if(bare.length>2&&(bare[0]==='ا'||bare[0]==='أ')&&bare[1]==='ل'){
+  // «لِلـ» = لِ + الـ ؛ همزهٔ وصل نوشته نمی‌شود، پس شاخهٔ الـ زیر آن را نمی‌بیند و
+  // لام‌ها پشت‌سرهم چاپ می‌شوند: لِلنُّشُورِ → lilnnuşûri. الف را برمی‌گردانیم تا همان
+  // مسیرِ الـ (شمسی/قمری) اجرا شود و e آغازینش با آپاستروف وصل شود.
+  if(bare.length>3&&bare[0]==='ل'&&bare[1]==='ل'){
+    const cut=_arCutFirst(w);
+    return _arRender(_arTokens(cut.head))+"'"+_arWord('ا'+cut.rest).replace(/^ė/,'');
+  }
+  // حرف پیوسته + همزهٔ قطع (وَإِيَّاكَ): همزه در آغازِ واژهٔ اصلی است و نباید ʾ بگیرد.
+  // شرطِ «همزه حرکت/مدّ دارد و نشیمنش أ/إ/آ است» فُؤَاد، بِئْر و بَأْس را کنار می‌گذارد.
+  if(bare.length>2&&'وفبكک'.indexOf(bare[0])>=0&&'أإآ'.indexOf(bare[1])>=0){
+    const cut=_arCutFirst(w), tk=_arTokens(cut.rest);
+    if(tk.length&&!tk[0].sk&&(tk[0].v||tk[0].lg))
+      return _arRender(_arTokens(cut.head))+('وف'.indexOf(bare[0])>=0?' ':'')+_arWord(cut.rest);
+  }
+  // حرف پیوسته + واژه‌ای که خودش در واژه‌نامه است (لِهذا، بِهذا، وَذلك): بدون این،
+  // مسیرِ حرف‌به‌حرف می‌رود و مدِّ نانوشته می‌افتد → liẕâ. پس از شاخه‌های الـ/همزه می‌آید
+  // تا فَالله و مانندش همانجا بمانند؛ بازگشت به _arWord خودش واژه‌نامه و اعراب را می‌زند
+  if(bare.length>2&&'وفبكکل'.indexOf(bare[0])>=0){
+    const cut=_arCutFirst(w);
+    const rkey=_arStripD(cut.rest).replace(/[ىی]/g,'ي').replace(/ک/g,'ك').replace(/[أإ]/g,'ا');
+    if(_AR_WORDS[rkey]||_AR_MAQSURA[rkey]) return _arRender(_arTokens(cut.head))+_arWord(cut.rest);
+  }
+  // همزهٔ وصلِ «الـ» هیچ‌وقت کسره یا ضمه نمی‌گیرد (اَلْ یا الْ). پس اِلهی، اِلهنا و مانندشان
+  // حرف تعریف ندارند و الفشان جزء خودِ واژه است — بدون این شرط El-hy درمی‌آید.
+  const a0=_arTokens(w)[0]||{};
+  if(bare.length>2&&(bare[0]==='ا'||bare[0]==='أ')&&bare[1]==='ل'&&(!a0.v||a0.v==='a')){
     const rest=_arDropArticle(w), rbare=_arStripD(rest);
     const body=_AR_WORDS[rbare]?(_AR_WORDS[rbare]+_arCaseTail(rest,_AR_WORDS[rbare])):_arRender(_arTokens(rest));
     // شمسی: لام در حرف بعد ادغام و مشدّد می‌شود (eş-şems) — قمری: el- می‌ماند
     // نشانهٔ ترکیبی هم باید همراه حرف بیاید وگرنه es-s̱ می‌شود به‌جای es̱-s̱
     const head=(body.match(/^.[\u0300-\u036F]*/)||[''])[0];
-    return (_AR_SUN.indexOf(bare[2])>=0?'e'+head+'-':'el-')+body;
+    return (_AR_SUN.indexOf(bare[2])>=0?'ė'+head+'-':'ėl-')+body;
   }
   return _arRender(_arTokens(w));
 }
@@ -2445,11 +2613,25 @@ function arToTr(text){
   if(!text) return '';
   let out=text.replace(/[\u0621-\u065F\u0670\u0640\u06A9\u06CC]+/g,m=>_arWord(m));
   out=out.replace(/۔/g,'.');
+  // نشانه‌های نگارشی عربی در خروجی لاتین باقی می‌ماندند (biebhâhu، ve / cemîlun؛)
+  out=out.replace(/،/g,',').replace(/؛/g,';').replace(/؟/g,'?').replace(/٪/g,'%').replace(/٬/g,',');
+  out=out.replace(/\s+([,;:.?!])/g,'$1');
+  // «یا» + واژه‌ای با همزهٔ وصل: الف می‌افتد و به یا می‌چسبد (يَا ابْنَ → yebne)
+  out=out.replace(/\byâ\s+\u0001i/gi,'yė');
+  out=out.replace(/\u0001/g,'');   // نشانهٔ همزهٔ وصل، هرجا مصرف نشد
   // وصل: «الـ» پس از واژه‌ای که به مصوت ختم شده → Allâhi'r-rahmân
-  out=out.replace(/([aeıioöuüâîû])\s+e(\S[\u0300-\u036F]*)-/g,"$1'$2-");
+  out=out.replace(/([aeėıioöuüâîû])\s+ė(\S[\u0300-\u036F]*)-/g,"$1'$2-");
+  // موصول‌ها هم با همزهٔ وصل آغاز می‌شوند ولی خط تیرهٔ الـ را ندارند: yâ ayyuhâ'llezîne
+  out=out.replace(/([aeėıioöuüâîû])\s+ė(ll)/g,"$1'$2");
   out=out.replace(/([Bb])ismi Allâh/g,"$1ismillâh");   // وصلِ رایج: Bismillâhi
-  // \p{Ll} تا حرف بزرگ‌شونده پیدا شود؛ ʾ و ʿ خودشان حرف‌اند ولی بزرگ نمی‌شوند
-  return out.trim().replace(/\p{Ll}/u,c=>c.toUpperCase());
+  // وصلِ «الله» پس از مصوت: raḥmetu'llâhi — همان قاعدهٔ الـ، ولی Allâh از واژه‌نامه با A بزرگ
+  // بیرون می‌آید پس الگوهای بالا آن را نمی‌بینند. پس از Bismillâh می‌آید تا آن وصلِ ویژه دست‌نخورده بماند
+  out=out.replace(/([aeėıioöuüâîû])\s+Allâh/g,"$1'llâh");
+  // ^\p{Ll} فقط حرفِ آغازِ رشته را بزرگ می‌کند؛ ʾ و ʿ خودشان حرف‌اند ولی بزرگ نمی‌شوند
+  // (پیش‌تر \p{Ll} بدون ^ بود و در کلماتی مثل «Allâh» که خودش با A بزرگ شروع می‌شد،
+  //  به اشتباه اولین حرف کوچکِ بعدی (l) را می‌گرفت → ALlâh به‌جای Allâh)
+  // در املای ترکی بزرگِ i حرف İ است نه I — I بزرگِ ı است و toUpperCase() هر دو را یکی می‌کند
+  return out.trim().replace(/^\p{Ll}/u,c=>c==='i'?'İ':c.toUpperCase());
 }
 
 // ── دکمه‌های آوانگاری ──
@@ -2894,6 +3076,8 @@ function renderClassifiedBreadcrumb(){
 function clOpenFolder(folderId){
   classifiedCurrentFolder=folderId||null;
   renderClassifiedTree();
+  // طبقه‌بندی هم مثل خانه دنبالهٔ پوشه‌به‌پوشه دارد؛ ریشه‌اش به خانه برنمی‌گردد
+  navTo({page:'classified',clFolderId:classifiedCurrentFolder},'classified');
 }
 
 let _editingClFolderId=null;
@@ -3100,14 +3284,14 @@ function openSearch(){
   document.getElementById('search-input').value='';
   document.getElementById('search-results').innerHTML='<div class="search-empty"><div class="search-empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div>'+esc(tr18n('searchPrompt'))+'</div></div>';
   setTimeout(()=>document.getElementById('search-input').focus(),200);
-  history.pushState({page:'search'},'');
+  navTo({page:'search'});
 }
 function closeSearch(fromPop){
   document.getElementById('screen-search').classList.add('hidden');
   if(searchFromPrayer&&currentPrayerId) document.getElementById('screen-prayer').classList.remove('hidden');
   else switchTabRaw('home');
   updateInlineAddButtons();
-  // اگر کاربر دکمه‌ی بستن را زد (نه دکمه‌ی back مرورگر)، state اضافه‌شده را پاک کن
+  // بستن با دکمه‌ی خودِ صفحه: ورودیِ جستجو را از تاریخچه بردار
   if(!fromPop) history.back();
 }
 let _searchTimer=null;
@@ -3168,12 +3352,12 @@ function doSearch(q){
 function searchGoTo(prayerId,verseId){
   // صفحه‌ی جستجو را مخفی کن و رکورد history جستجو را با مقصد جایگزین کن
   document.getElementById('screen-search').classList.add('hidden');
-  if(history.state&&history.state.page==='search') history.replaceState({page:'home',folderId:currentFolderId},'');
+  if(navCur.page==='search') navReplace({page:'home',folderId:currentFolderId});
   setTimeout(()=>{openPrayer(prayerId);if(verseId)setTimeout(()=>highlightVerse(verseId),400);},100);
 }
 function searchGoToFolder(folderId){
   document.getElementById('screen-search').classList.add('hidden');
-  if(history.state&&history.state.page==='search') history.replaceState({page:'home',folderId:currentFolderId},'');
+  if(navCur.page==='search') navReplace({page:'home',folderId:currentFolderId});
   setTimeout(()=>{openFolder(folderId);},100);
 }
 
@@ -4121,7 +4305,7 @@ const I18N={
     fontPanelArabicTitle:'قلم دعا',fontPanelPersianTitle:'قلم ترجمه',fontPanelTranslitTitle:'قلم تلفظ',fontPanelTurkishTitle:'قلم ترجمه ترکی',
     dispTitleDefault:'⚙️ تنظیمات',
     selectColorTitle:'انتخاب رنگ',hexColorLabel:'کد رنگ (Hex)',
-    bookmarkLabel:'نشانه‌گذاری',bookmarkRemoveLabel:'حذف نشانه',copyTextLabel:'کپی متن',
+    bookmarkLabel:'نشانه‌گذاری',bookmarkRemoveLabel:'حذف نشانه',copyTextLabel:'کپی متن',lpTranslitLabel:'تلفظ ترکی این بند',lpTranslitAllLabel:'تلفظ خودکار همهٔ بندها',
     clAddPrayerBtnLabel:'افزودن دعا',
     fullscreenTooltip:'تمام صفحه',exitFullscreenTooltip:'خروج از تمام صفحه',displaySettingsTooltip:'تنظیمات نمایش',
     selectPrayerTitle:'انتخاب دعا',
@@ -4243,7 +4427,7 @@ const I18N={
     fontPanelArabicTitle:'Prayer font',fontPanelPersianTitle:'Translation font',fontPanelTranslitTitle:'Transliteration font',fontPanelTurkishTitle:'Turkish translation font',
     dispTitleDefault:'⚙️ Settings',
     selectColorTitle:'Select Color',hexColorLabel:'Color code (Hex)',
-    bookmarkLabel:'Bookmark',bookmarkRemoveLabel:'Remove bookmark',copyTextLabel:'Copy text',
+    bookmarkLabel:'Bookmark',bookmarkRemoveLabel:'Remove bookmark',copyTextLabel:'Copy text',lpTranslitLabel:'Turkish transliteration',lpTranslitAllLabel:'Auto transliterate all',
     clAddPrayerBtnLabel:'Add Prayer',
     fullscreenTooltip:'Fullscreen',exitFullscreenTooltip:'Exit fullscreen',displaySettingsTooltip:'Display settings',
     selectPrayerTitle:'Select Prayer',
@@ -4365,7 +4549,7 @@ const I18N={
     fontPanelArabicTitle:'Dua yazı tipi',fontPanelPersianTitle:'Çeviri yazı tipi',fontPanelTranslitTitle:'Okunuş yazı tipi',fontPanelTurkishTitle:'Türkçe çeviri yazı tipi',
     dispTitleDefault:'⚙️ Ayarlar',
     selectColorTitle:'Renk Seç',hexColorLabel:'Renk kodu (Hex)',
-    bookmarkLabel:'Yer işareti',bookmarkRemoveLabel:'Yer işaretini kaldır',copyTextLabel:'Metni kopyala',
+    bookmarkLabel:'Yer işareti',bookmarkRemoveLabel:'Yer işaretini kaldır',copyTextLabel:'Metni kopyala',lpTranslitLabel:'Okunuş Türkçe',lpTranslitAllLabel:'Tümüne otomatik okunuş',
     clAddPrayerBtnLabel:'Dua Ekle',
     fullscreenTooltip:'Tam ekran',exitFullscreenTooltip:'Tam ekrandan çık',displaySettingsTooltip:'Görünüm ayarları',
     selectPrayerTitle:'Dua Seç',
@@ -4710,7 +4894,10 @@ async function init(){
     else delete state.settings.lastPrayerId;
   }
   updateNavCurrentState();
-  history.replaceState({page:'home',folderId:null},'');
+  // ورودیِ پایه: state تهی. از این پس هر ناوبری یک ورودیِ واقعی به تاریخچه می‌افزاید.
+  history.replaceState({},'');
+  navSection='home';
+  navCur={page:'home',folderId:null};
   if((state.nodes||[]).length===0) seedSample();
   // ══ BOOK MODULE: بازگردانی متن کتاب‌ها از BUNDLED_DATA + پاکسازی کلیدهای یتیم ══
   try{ await bookMigrateAll(); }catch(e){ console.warn('book migrate:',e); }
@@ -4972,7 +5159,7 @@ function openBook(bookId,skipHistory){
   document.getElementById('bk-search-toggle').classList.remove('on');
   renderBookChapters();
   bkShowScreen('book');
-  if(!skipHistory) history.pushState({page:'book',bookId,folderId:currentFolderId},'');
+  if(!skipHistory) navTo({page:'book',bookId,folderId:currentFolderId});
 }
 
 function renderBookChapters(){
@@ -5096,7 +5283,7 @@ async function openBookPage(p,opts){
     if(el){ requestAnimationFrame(()=>{ view.scrollTop=Math.max(0,el.offsetTop-10); el.classList.add('bk-hit'); setTimeout(()=>el.classList.remove('bk-hit'),2200); }); }
   }
   bkShowScreen('bookread');
-  if(!opts.skipHistory) history.pushState({page:'bookread',bookId:bkCurrentBookId,p:page,folderId:currentFolderId},'');
+  if(!opts.skipHistory) navTo({page:'bookread',bookId:bkCurrentBookId,p:page,folderId:currentFolderId});
   bkSaveReading(page);
   bkPrefetch(bkPageIdx);
 }
@@ -5106,7 +5293,7 @@ function bookTurn(dir){
   const next=bkPageIdx+dir;
   if(next<0||next>=bkPageList.length){ bkHaptic(6); return; }
   openBookPage(bkPageList[next],{dir,skipHistory:true});
-  history.replaceState({page:'bookread',bookId:bkCurrentBookId,p:bkPageList[next],folderId:currentFolderId},'');
+  navReplace({page:'bookread',bookId:bkCurrentBookId,p:bkPageList[next],folderId:currentFolderId});
   bkHaptic(8);
 }
 
@@ -5445,7 +5632,7 @@ mpSkeleton(document.getElementById('home-list'),4);
 // ── B7 + C5: ورود پلکانی و درخشش کارت تازه ──
 // پله‌ای‌شدن فقط وقتی وارد یک پوشه/کتاب می‌شویم، نه در هر بازرندر
 // (مثلاً بعد از جابه‌جایی آیتم‌ها) تا حرکت تکراری و آزاردهنده نشود.
-let _mpLastFolder=' ';
+let _mpLastFolder='\u0000';
 let _mpNewNodeId=null;
 // آیتم‌های فهرست content-visibility:auto دارند: مرورگر رندر آیتم‌های خارج از دید را
 // عقب می‌اندازد و انیمیشنِ fill:backwards آن‌ها را روی opacity:0 نگه می‌دارد. پس بعد از
